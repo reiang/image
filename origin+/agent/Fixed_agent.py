@@ -5,7 +5,7 @@ class FixedAgent():
         self.max_depth = max_depth
 
     def choose_action(self, state):
-        action = self.mode * random.randint(1, self.max_depth) + self.max_depth - 1
+        action = self.mode * 8 + random.randint(0, self.max_depth-1)
         return action, None
     
     def store_transition(self, state, action, reward, next_state):

@@ -20,10 +20,9 @@ import torchvision.utils as vutils
 import torchvision.transforms.functional as TF
 import pdb
 # RL
-from agent.DQN_agent import DQN
 from agent.RL_env import compute_reward, formulate_state
 from agent.Fixed_agent import FixedAgent
-
+from hrl import HRL
 from RS_analysis import rs_analysis
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -84,7 +83,7 @@ def uiqi(reference_image, distorted_image):
 
 
 def main():
-    data_dir = 'div2k/'
+    data_dir = 'div2k'
     epochs = 300
     max_data_depth = 8
     hidden_size = 32
@@ -138,9 +137,11 @@ def main():
     # valid_loader = torch.utils.data.DataLoader(
     #     valid_set, batch_size=4, shuffle=False)
 
-    algs = ['DQN', 'Basic-8',  'Residual-4', 'Dense-2',]
+    algs = ['DQN', 'Basic-8',  'Residual-8', 'Dense-8',]
     # algs = ['DQN', 'Residual-4',]
 
+    h1_reward_alg = {alg: [] for alg in algs}
+    h0_reward_alg = {alg: [] for alg in algs}
     reward_alg = {alg: [] for alg in algs}
     psnr_alg = {alg: [] for alg in algs}
     ssim_alg = {alg: [] for alg in algs}
@@ -151,6 +152,8 @@ def main():
 
     for alg in tqdm(algs):
     
+        h1_reward_avg = []
+        h0_reward_avg = []
         reward_avg = []
         psnr_avg = []
         ssim_avg = []
@@ -162,7 +165,7 @@ def main():
         action_log = {
             'mode': [],
             'depth': [],
-            'action': [],
+            'Combination': [],
         }
 
         avg_times = 1 if alg == 'DQN' else 1
@@ -170,9 +173,7 @@ def main():
         for _ in range(avg_times):
 
             if alg in ['DQN', ]:
-                agent = DQN(gamma=0.99, lr=0.0001, action_num=24, state_num=6,
-                            buffer_size=10000, batch_size=64, INITIAL_EPSILON=0.2, FINAL_EPSILON=0.001, max_episode=1000,
-                            replace=1000, chkpt_dir='./chkpt')
+                agent=HRL()
             else:
                 fixed_mode = ['Basic', 'Residual', 'Dense'].index(alg.split('-')[0])
                 max_fixed_depth = int(alg.split('-')[1])
@@ -197,11 +198,13 @@ def main():
             uiqi_s = []
             rs_s = []
             # r
+            h1_rewards = []
+            h0_rewards = []
             rewards = []
             psnr_s = []
             ssim_s = []
             next_state = [0, 0, 0, 0, False, 0]
-            
+
             for ep in tqdm(range(epochs)):
                 # 原始 dataset 抽样到 subset
                 train_size = 100
@@ -215,13 +218,20 @@ def main():
 
                 consumption_weight = {'encode_mode': 1, 'depth': 0.1}
 
-
-                state = next_state
-                action, _ = agent.choose_action(state)
-                encode_mode = action // max_data_depth
-                data_depth = action % max_data_depth + 1
+                if alg in ['DQN', ]: 
+                    # 更新状态 选择动作
+                    state = next_state
+                    h0_action,h1_action = agent.choose_action(state)
+                    #模型选择和嵌入深度
+                    encode_mode = h0_action
+                    data_depth = h1_action +1 #深度范围从1开始
+                else:
+                    state=next_state
+                    action, _ = agent.choose_action(state)
+                    encode_mode = action // max_data_depth
+                    data_depth = action % max_data_depth + 1
                 if alg == 'DQN' and ep / epochs > 0.3:
-                    action_log['action'].append(action)
+                    action_log['Combination'].append(h0_action*8+h1_action+1)
                     action_log['mode'].append(encode_mode)
                     action_log['depth'].append(data_depth)
 
@@ -355,13 +365,23 @@ def main():
                 psnr_s.append(np.mean(metrics['val.psnr']))
                 ssim_s.append(np.mean(metrics['val.ssim']))
                 rs_s.append(np.mean(metrics['train.rs']))
+                #上层和下层奖励应该不同吧 
                 reward = compute_reward(psnr_s[-1], ssim_s[-1], consumption)
-                rewards.append(reward)
-
+                h0_reward=reward
+                h1_reward=reward
+                # 更新状态
                 next_state = formulate_state(bpps[-1], encode_mse_losses[-1], cover_scores[-1], message_density_s[-1], uiqi_s[-1], rs_s[-1])
-                agent.store_transition(state, action, reward, next_state)
+                if alg in ['DQN', ]: 
+                    # 计算奖励
+                    h0_rewards.append(h0_reward)
+                    h1_rewards.append(h1_reward) 
+                    # 存储经验
+                    agent.store_transition(state, h0_action, h1_action, h0_reward, h1_reward, next_state)
+                else:
+                    rewards.append(reward)
+                    agent.store_transition(state, action, reward, next_state)
+                # 学习
                 agent.learn()
-
                 # now = datetime.datetime.now()
                 # 保存模型状态
                 name = "EN_DE_%+.3f.dat" % (cover_score.item())
@@ -389,6 +409,8 @@ def main():
 
         # for data, y_label in zip([encode_mse_losses, bpps, rewards, psnr_s, ssim_s, consumptions],
         #                         ['Encoder mse loss ', 'Bits per pixel', 'Reward', 'PSNR', 'SSIM', 'Consumption', ]):
+            h0_reward_avg.append(h0_rewards)
+            h1_reward_avg.append(h1_rewards)
             reward_avg.append(rewards)
             mse_avg.append(encode_mse_losses)
             psnr_avg.append(psnr_s)
@@ -397,6 +419,8 @@ def main():
             uiqi_avg.append(uiqi_s)
             rs_avg.append(rs_s)
 
+        h0_reward_avg = np.mean(h0_reward_avg, axis=0).tolist()
+        h1_reward_avg = np.mean(h1_reward_avg, axis=0).tolist()
         reward_avg = np.mean(reward_avg, axis=0).tolist()
         psnr_avg = np.mean(psnr_avg, axis=0).tolist()
         ssim_avg = np.mean(ssim_avg, axis=0).tolist()
@@ -420,8 +444,8 @@ def main():
                 plt.savefig(os.path.join('.', 'results', data_dir, 'Action_' + title + '.png'))
                 plt.close()
 
-            for data, y_label in zip([reward_avg, psnr_avg, ssim_avg, consumption_avg, uiqi_avg, rs_avg, mse_avg],
-                                ['Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test','MSE loss']):
+            for data, y_label in zip([h0_reward_avg, h1_reward_avg,psnr_avg, ssim_avg, consumption_avg, uiqi_avg, rs_avg, mse_avg],
+                                ['H0_Reward','H1_Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test','MSE loss']):
                 plt.figure()
                 plt.plot(data)
                 plt.xlabel('Time slot')
@@ -431,6 +455,8 @@ def main():
                 plt.savefig(os.path.join('.', 'results', data_dir , alg + '_' + y_label + '.png'))
                 plt.close()
 
+        h0_reward_alg[alg] = h0_reward_avg
+        h1_reward_alg[alg] = h1_reward_avg
         reward_alg[alg] = reward_avg
         psnr_alg[alg] = psnr_avg
         ssim_alg[alg] = ssim_avg
@@ -438,20 +464,36 @@ def main():
         uiqi_alg[alg] = uiqi_avg
         rs_alg[alg] = rs_avg
         mse_alg[alg] = mse_avg
-    
-    for data, y_label in zip([reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
-        plt.figure()
-        for alg in algs:
-            plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)
-        plt.xlabel('Time slot')
-        plt.ylabel(y_label)
-        plt.legend()
-        plt.title(data_dir.upper())
-        plt.tight_layout()
-        # if not os.path.exists(os.path.join('.', 'results/', data_dir)):
-        #     os.mkdir(os.path.join('.', 'results/', data_dir))
-        plt.savefig(os.path.join('.', 'results', data_dir,  'All_' + y_label + '.png'))
-        plt.close()
+    if alg == 'DQN':
+        for data, y_label in zip([h0_reward_alg,h0_reward_alg,h1_reward_alg ,psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['H0_Reward','H0_Reward','H1_Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
+            # 上面多设置一次h0_reward_alg是为了能和其它算法一起画图
+            plt.figure()
+            for alg in algs:
+                plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)
+            plt.xlabel('Time slot')
+            # 为了使DQN和
+            plt.ylabel(y_label)
+            plt.legend()
+            plt.title(data_dir.upper())
+            plt.tight_layout()
+            # if not os.path.exists(os.path.join('.', 'results/', data_dir)):
+            #     os.mkdir(os.path.join('.', 'results/', data_dir))
+            plt.savefig(os.path.join('.', 'results', data_dir,  'All_' + y_label + '.png'))
+            plt.close()
+    else:
+        for data, y_label in zip([reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
+            plt.figure()
+            for alg in algs:
+                plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)
+            plt.xlabel('Time slot')
+            plt.ylabel(y_label)
+            plt.legend()
+            plt.title(data_dir.upper())
+            plt.tight_layout()
+            # if not os.path.exists(os.path.join('.', 'results/', data_dir)):
+            #     os.mkdir(os.path.join('.', 'results/', data_dir))
+            plt.savefig(os.path.join('.', 'results', data_dir,  'All_' + y_label + '.png'))
+            plt.close()
 
     # save mat
     import scipy.io as sio
