@@ -14,7 +14,7 @@ class HRL(object):
     #动作选择
     def choose_action(self, state):  
         h0_action,_= self.h0_agent.choose_action(state)
-        # 下层根据上层经验进行动作选择
+        # 下层根据上层动作进行动作选择
         cho_state_0action = state + [h0_action]
         h1_action ,_= self.h1_agent.choose_action(cho_state_0action)
         return h0_action,h1_action

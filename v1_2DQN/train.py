@@ -441,6 +441,7 @@ def main():
         h0_reward_avg = np.mean(h0_reward_avg, axis=0).tolist()
         h1_reward_avg = np.mean(h1_reward_avg, axis=0).tolist()
         reward_avg = np.mean(reward_avg, axis=0).tolist()
+        mse_avg = np.mean(mse_avg, axis=0).tolist() 
         psnr_avg = np.mean(psnr_avg, axis=0).tolist()
         ssim_avg = np.mean(ssim_avg, axis=0).tolist()
         uiqi_avg = np.mean(uiqi_avg, axis=0).tolist()
@@ -484,8 +485,7 @@ def main():
         rs_alg[alg] = rs_avg
         mse_alg[alg] = mse_avg
     if alg == 'DQN':
-        for data, y_label in zip([h0_reward_alg,h0_reward_alg,h1_reward_alg ,psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['H0_Reward','H0_Reward','H1_Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
-            # 上面多设置一次h0_reward_alg是为了能和其它算法一起画图
+        for data, y_label in zip([h0_reward_alg,h1_reward_alg ,psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['H0_Reward','H1_Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
             plt.figure()
             for alg in algs:
                 plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)
@@ -499,8 +499,9 @@ def main():
             plt.savefig(os.path.join('.', 'results', data_dir,  'All_' + y_label + '.png'))
             plt.close()
     else:
-        for data, y_label in zip([reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
-            plt.figure()
+        for data, y_label in zip([reward_alg,reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['H0_Reward', 'H1_Reward','PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
+            # 上面多设置一次reward_alg是为了能和DQN两层一起画图
+            plt.figure() 
             for alg in algs:
                 plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)
             plt.xlabel('Time slot')

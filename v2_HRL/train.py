@@ -22,7 +22,7 @@ import pdb
 # RL
 from agent.RL_env import compute_reward, formulate_state
 from agent.Fixed_agent import FixedAgent
-from hrl import HRL
+from agent.hrl import HRL
 from RS_analysis import rs_analysis
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -84,7 +84,7 @@ def uiqi(reference_image, distorted_image):
 
 def main():
     data_dir = 'div2k'
-    epochs = 300
+    epochs = 50
     max_data_depth = 8
     hidden_size = 32
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -219,9 +219,16 @@ def main():
                 consumption_weight = {'encode_mode': 1, 'depth': 0.1}
 
                 if alg in ['DQN', ]: 
-                    # 更新状态 选择动作
                     state = next_state
-                    h0_action,h1_action = agent.choose_action(state)
+                    if ep == 0 :
+                        # 更新状态 选择动作
+                        # 因为下层的下个状态需要上层的动作 所以动作选择在本回合结束后
+                        # 这里是最开始先选择一次动作
+                        h0_action,h1_action = agent.choose_action(state)
+                    else:
+                        print("h0_next_action",h0_next_action)
+                        print("h1_next_action",h1_next_action)
+                        h0_action,h1_action = h0_next_action,h1_next_action  
                     #模型选择和嵌入深度
                     encode_mode = h0_action
                     data_depth = h1_action +1 #深度范围从1开始
@@ -332,7 +339,7 @@ def main():
                     payload = torch.zeros((N, data_depth, H, W),
                                         device=device).random_(0, 2)
                     generated = encoder.forward(cover, payload)
-                    vutils.save_image(generated, "images.png")
+                    vutils.save_image(generated, "images.png") 
 
                     decoded = decoder.forward(generated)
                     # print(decoded)
@@ -375,13 +382,18 @@ def main():
                     # 计算奖励
                     h0_rewards.append(h0_reward)
                     h1_rewards.append(h1_reward) 
+                    #因为下层状态需要上层动作 所以在这里先选出下一次动作
+                    h0_next_action,h1_next_action = agent.choose_action(next_state)
+                    print("h0_next_action_1",h0_next_action)
+                    print("h1_next_action_1",h1_next_action)
                     # 存储经验
-                    agent.store_transition(state, h0_action, h1_action, h0_reward, h1_reward, next_state)
+                    agent.store_transition(state, h0_action, h1_action, h0_reward, h1_reward, next_state,h0_next_action)
                 else:
                     rewards.append(reward)
                     agent.store_transition(state, action, reward, next_state)
                 # 学习
                 agent.learn()
+    
                 # now = datetime.datetime.now()
                 # 保存模型状态
                 name = "EN_DE_%+.3f.dat" % (cover_score.item())
@@ -422,6 +434,7 @@ def main():
         h0_reward_avg = np.mean(h0_reward_avg, axis=0).tolist()
         h1_reward_avg = np.mean(h1_reward_avg, axis=0).tolist()
         reward_avg = np.mean(reward_avg, axis=0).tolist()
+        mse_avg = np.mean(mse_avg, axis=0).tolist() 
         psnr_avg = np.mean(psnr_avg, axis=0).tolist()
         ssim_avg = np.mean(ssim_avg, axis=0).tolist()
         uiqi_avg = np.mean(uiqi_avg, axis=0).tolist()
@@ -454,50 +467,34 @@ def main():
                 plt.tight_layout()
                 plt.savefig(os.path.join('.', 'results', data_dir , alg + '_' + y_label + '.png'))
                 plt.close()
-
         h0_reward_alg[alg] = h0_reward_avg
         h1_reward_alg[alg] = h1_reward_avg
         reward_alg[alg] = reward_avg
+        mse_alg[alg] = mse_avg
         psnr_alg[alg] = psnr_avg
         ssim_alg[alg] = ssim_avg
         consumption_alg[alg] = consumption_avg
         uiqi_alg[alg] = uiqi_avg
         rs_alg[alg] = rs_avg
-        mse_alg[alg] = mse_avg
-    if alg == 'DQN':
-        for data, y_label in zip([h0_reward_alg,h0_reward_alg,h1_reward_alg ,psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['H0_Reward','H0_Reward','H1_Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
-            # 上面多设置一次h0_reward_alg是为了能和其它算法一起画图
+        for data, y_label in zip([h0_reward_alg,h1_reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['H0_Reward','H1_Reward' ,'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
             plt.figure()
             for alg in algs:
-                plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)
-            plt.xlabel('Time slot')
-            # 为了使DQN和
-            plt.ylabel(y_label)
-            plt.legend()
-            plt.title(data_dir.upper())
-            plt.tight_layout()
-            # if not os.path.exists(os.path.join('.', 'results/', data_dir)):
-            #     os.mkdir(os.path.join('.', 'results/', data_dir))
-            plt.savefig(os.path.join('.', 'results', data_dir,  'All_' + y_label + '.png'))
-            plt.close()
-    else:
-        for data, y_label in zip([reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
-            plt.figure()
-            for alg in algs:
+                if alg !='DQN':
+                    if y_label=="H0_Reward" or y_label=="H1_Reward":
+                        data[alg]=reward_alg[alg]
                 plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)
             plt.xlabel('Time slot')
             plt.ylabel(y_label)
             plt.legend()
             plt.title(data_dir.upper())
             plt.tight_layout()
-            # if not os.path.exists(os.path.join('.', 'results/', data_dir)):
-            #     os.mkdir(os.path.join('.', 'results/', data_dir))
-            plt.savefig(os.path.join('.', 'results', data_dir,  'All_' + y_label + '.png'))
+            print("other",y_label)
+            plt.savefig(os.path.join('.', 'results', data_dir, 'All_' + y_label + '.png'))
             plt.close()
 
     # save mat
     import scipy.io as sio
-    sio.savemat('results.mat', {'reward': reward_alg, 'psnr': psnr_alg, 'ssim': ssim_alg, 'consumption': consumption_alg, 'uiqi': uiqi_alg, 'rs': rs_alg})
+    sio.savemat('results.mat', {'reward': reward_alg, 'psnr': psnr_alg, 'ssim': ssim_alg, 'consumption': consumption_alg, 'uiqi': uiqi_alg, 'rs': rs_alg, 'mse': mse_alg})
 
 
 if __name__ == '__main__':
