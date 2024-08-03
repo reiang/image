@@ -142,22 +142,32 @@ def main():
     # algs = ['DQN', 'Residual-4',]
 
     reward_alg = {alg: [] for alg in algs}
+    # reward
     psnr_alg = {alg: [] for alg in algs}
     ssim_alg = {alg: [] for alg in algs}
     consumption_alg = {alg: [] for alg in algs}
+    # state
+    bpp_alg = {alg: [] for alg in algs}
+    mse_alg = {alg: [] for alg in algs}
+    cover_scores_alg = {alg: [] for alg in algs}
+    message_density_alg = {alg: [] for alg in algs}
     uiqi_alg = {alg: [] for alg in algs}
     rs_alg = {alg: [] for alg in algs}
-    mse_alg = {alg: [] for alg in algs}
 
     for alg in tqdm(algs):
     
         reward_avg = []
+        # state
+        bpp_avg = []
+        mse_avg = []
+        cover_scores_avg = [] 
+        message_density_avg = []
+        uiqi_avg = []
+        rs_avg = []
+        # reward
         psnr_avg = []
         ssim_avg = []
         consumption_avg = []
-        uiqi_avg = []
-        rs_avg = []
-        mse_avg = []
 
         action_log = {
             'mode': [],
@@ -390,19 +400,30 @@ def main():
         # for data, y_label in zip([encode_mse_losses, bpps, rewards, psnr_s, ssim_s, consumptions],
         #                         ['Encoder mse loss ', 'Bits per pixel', 'Reward', 'PSNR', 'SSIM', 'Consumption', ]):
             reward_avg.append(rewards)
+            # state 
+            bpp_avg.append(bpps)
             mse_avg.append(encode_mse_losses)
+            cover_scores_avg.append(cover_scores)
+            message_density_avg.append(message_density_s)
+            uiqi_avg.append(uiqi_s)
+            rs_avg.append(rs_s)
+            # reward
             psnr_avg.append(psnr_s)
             ssim_avg.append(ssim_s)
             consumption_avg.append(consumptions)
-            uiqi_avg.append(uiqi_s)
-            rs_avg.append(rs_s)
 
         reward_avg = np.mean(reward_avg, axis=0).tolist()
+        # state
+        bpp_avg = np.mean(bpp_avg, axis=0).tolist()
+        mse_avg = np.mean(mse_avg, axis=0).tolist() 
+        cover_scores_avg = np.mean(cover_scores_avg, axis=0).tolist()
+        message_density_avg = np.mean(message_density_avg, axis=0).tolist()
+        uiqi_avg = np.mean(uiqi_avg, axis=0).tolist()
+        rs_avg = np.mean(rs_avg, axis=0).tolist()
+        # reward
         psnr_avg = np.mean(psnr_avg, axis=0).tolist()
         ssim_avg = np.mean(ssim_avg, axis=0).tolist()
-        uiqi_avg = np.mean(uiqi_avg, axis=0).tolist()
         consumption_avg = np.mean(consumption_avg, axis=0).tolist()
-        rs_avg = np.mean(rs_avg, axis=0).tolist()
 
 
         
@@ -420,8 +441,8 @@ def main():
                 plt.savefig(os.path.join('.', 'results', data_dir, 'Action_' + title + '.png'))
                 plt.close()
 
-            for data, y_label in zip([reward_avg, psnr_avg, ssim_avg, consumption_avg, uiqi_avg, rs_avg, mse_avg],
-                                ['Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test','MSE loss']):
+            for data, y_label in zip([reward_avg,psnr_avg, ssim_avg, consumption_avg,bpp_avg,cover_scores_avg,message_density_avg, uiqi_avg, rs_avg, mse_avg],
+                                ['Reward', 'PSNR', 'SSIM', 'Consumption', 'Bpp','Cover_Score','Message_Density','UIQI', 'RS test', 'MSE loss']):
                 plt.figure()
                 plt.plot(data)
                 plt.xlabel('Time slot')
@@ -432,14 +453,20 @@ def main():
                 plt.close()
 
         reward_alg[alg] = reward_avg
+        # state
+        bpp_alg[alg] = bpp_avg
+        mse_alg[alg] = mse_avg
+        cover_scores_alg[alg] = cover_scores_avg
+        message_density_alg[alg] = message_density_avg
+        uiqi_alg[alg] = uiqi_avg
+        rs_alg[alg] = rs_avg
+        # reward
         psnr_alg[alg] = psnr_avg
         ssim_alg[alg] = ssim_avg
         consumption_alg[alg] = consumption_avg
-        uiqi_alg[alg] = uiqi_avg
-        rs_alg[alg] = rs_avg
-        mse_alg[alg] = mse_avg
     
-    for data, y_label in zip([reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
+    for data, y_label in zip([reward_alg, psnr_alg, ssim_alg, consumption_alg,bpp_alg,cover_scores_alg,message_density_alg, uiqi_alg, rs_alg, mse_alg], 
+                                 ['Reward' ,'PSNR', 'SSIM', 'Consumption', 'Bpp','Cover_Score','Message_Density','UIQI', 'RS test', 'MSE loss']):
         plt.figure()
         for alg in algs:
             plt.plot(data[alg], label=alg.split('-')[0] if alg != 'DQN' else alg)

@@ -84,7 +84,7 @@ def uiqi(reference_image, distorted_image):
 
 def main():
     data_dir = 'div2k'
-    epochs = 50
+    epochs = 20
     max_data_depth = 8
     hidden_size = 32
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -143,24 +143,35 @@ def main():
     h1_reward_alg = {alg: [] for alg in algs}
     h0_reward_alg = {alg: [] for alg in algs}
     reward_alg = {alg: [] for alg in algs}
+    # reward
     psnr_alg = {alg: [] for alg in algs}
     ssim_alg = {alg: [] for alg in algs}
     consumption_alg = {alg: [] for alg in algs}
+    # state
+    bpp_alg = {alg: [] for alg in algs}
+    mse_alg = {alg: [] for alg in algs}
+    cover_scores_alg = {alg: [] for alg in algs}
+    message_density_alg = {alg: [] for alg in algs}
     uiqi_alg = {alg: [] for alg in algs}
     rs_alg = {alg: [] for alg in algs}
-    mse_alg = {alg: [] for alg in algs}
+    
 
     for alg in tqdm(algs):
     
         h1_reward_avg = []
         h0_reward_avg = []
         reward_avg = []
+        # state
+        bpp_avg = []
+        mse_avg = []
+        cover_scores_avg = [] 
+        message_density_avg = []
+        uiqi_avg = []
+        rs_avg = []
+        # reward
         psnr_avg = []
         ssim_avg = []
         consumption_avg = []
-        uiqi_avg = []
-        rs_avg = []
-        mse_avg = []
 
         action_log = {
             'mode': [],
@@ -226,8 +237,6 @@ def main():
                         # 这里是最开始先选择一次动作
                         h0_action,h1_action = agent.choose_action(state)
                     else:
-                        print("h0_next_action",h0_next_action)
-                        print("h1_next_action",h1_next_action)
                         h0_action,h1_action = h0_next_action,h1_next_action  
                     #模型选择和嵌入深度
                     encode_mode = h0_action
@@ -384,8 +393,6 @@ def main():
                     h1_rewards.append(h1_reward) 
                     #因为下层状态需要上层动作 所以在这里先选出下一次动作
                     h0_next_action,h1_next_action = agent.choose_action(next_state)
-                    print("h0_next_action_1",h0_next_action)
-                    print("h1_next_action_1",h1_next_action)
                     # 存储经验
                     agent.store_transition(state, h0_action, h1_action, h0_reward, h1_reward, next_state,h0_next_action)
                 else:
@@ -424,24 +431,32 @@ def main():
             h0_reward_avg.append(h0_rewards)
             h1_reward_avg.append(h1_rewards)
             reward_avg.append(rewards)
+            # state 
+            bpp_avg.append(bpps)
             mse_avg.append(encode_mse_losses)
+            cover_scores_avg.append(cover_scores)
+            message_density_avg.append(message_density_s)
+            uiqi_avg.append(uiqi_s)
+            rs_avg.append(rs_s)
+            # reward
             psnr_avg.append(psnr_s)
             ssim_avg.append(ssim_s)
             consumption_avg.append(consumptions)
-            uiqi_avg.append(uiqi_s)
-            rs_avg.append(rs_s)
 
         h0_reward_avg = np.mean(h0_reward_avg, axis=0).tolist()
         h1_reward_avg = np.mean(h1_reward_avg, axis=0).tolist()
         reward_avg = np.mean(reward_avg, axis=0).tolist()
+        # state
+        bpp_avg = np.mean(bpp_avg, axis=0).tolist()
         mse_avg = np.mean(mse_avg, axis=0).tolist() 
+        cover_scores_avg = np.mean(cover_scores_avg, axis=0).tolist()
+        message_density_avg = np.mean(message_density_avg, axis=0).tolist()
+        uiqi_avg = np.mean(uiqi_avg, axis=0).tolist()
+        rs_avg = np.mean(rs_avg, axis=0).tolist()
+        # reward
         psnr_avg = np.mean(psnr_avg, axis=0).tolist()
         ssim_avg = np.mean(ssim_avg, axis=0).tolist()
-        uiqi_avg = np.mean(uiqi_avg, axis=0).tolist()
         consumption_avg = np.mean(consumption_avg, axis=0).tolist()
-        rs_avg = np.mean(rs_avg, axis=0).tolist()
-
-
         
 
         # 分析 DQN 收敛时选择的动作
@@ -457,8 +472,8 @@ def main():
                 plt.savefig(os.path.join('.', 'results', data_dir, 'Action_' + title + '.png'))
                 plt.close()
 
-            for data, y_label in zip([h0_reward_avg, h1_reward_avg,psnr_avg, ssim_avg, consumption_avg, uiqi_avg, rs_avg, mse_avg],
-                                ['H0_Reward','H1_Reward', 'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test','MSE loss']):
+            for data, y_label in zip([h0_reward_avg, h1_reward_avg,psnr_avg, ssim_avg, consumption_avg,bpp_avg,cover_scores_avg,message_density_avg, uiqi_avg, rs_avg, mse_avg],
+                                ['H0_Reward','H1_Reward', 'PSNR', 'SSIM', 'Consumption', 'Bpp','Cover_Score','Message_Density','UIQI', 'RS test', 'MSE loss']):
                 plt.figure()
                 plt.plot(data)
                 plt.xlabel('Time slot')
@@ -470,13 +485,19 @@ def main():
         h0_reward_alg[alg] = h0_reward_avg
         h1_reward_alg[alg] = h1_reward_avg
         reward_alg[alg] = reward_avg
+        # state
+        bpp_alg[alg] = bpp_avg
         mse_alg[alg] = mse_avg
+        cover_scores_alg[alg] = cover_scores_avg
+        message_density_alg[alg] = message_density_avg
+        uiqi_alg[alg] = uiqi_avg
+        rs_alg[alg] = rs_avg
+        # reward
         psnr_alg[alg] = psnr_avg
         ssim_alg[alg] = ssim_avg
         consumption_alg[alg] = consumption_avg
-        uiqi_alg[alg] = uiqi_avg
-        rs_alg[alg] = rs_avg
-        for data, y_label in zip([h0_reward_alg,h1_reward_alg, psnr_alg, ssim_alg, consumption_alg, uiqi_alg, rs_alg, mse_alg], ['H0_Reward','H1_Reward' ,'PSNR', 'SSIM', 'Consumption', 'UIQI', 'RS test', 'MSE loss']):
+        for data, y_label in zip([h0_reward_alg,h1_reward_alg, psnr_alg, ssim_alg, consumption_alg,bpp_alg,cover_scores_alg,message_density_alg, uiqi_alg, rs_alg, mse_alg], 
+                                 ['H0_Reward','H1_Reward' ,'PSNR', 'SSIM', 'Consumption', 'Bpp','Cover_Score','Message_Density','UIQI', 'RS test', 'MSE loss']):
             plt.figure()
             for alg in algs:
                 if alg !='DQN':
@@ -488,7 +509,6 @@ def main():
             plt.legend()
             plt.title(data_dir.upper())
             plt.tight_layout()
-            print("other",y_label)
             plt.savefig(os.path.join('.', 'results', data_dir, 'All_' + y_label + '.png'))
             plt.close()
 
